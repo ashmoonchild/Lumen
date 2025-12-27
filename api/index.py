@@ -7,61 +7,54 @@ import os
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
-            # 1. Configuration de l'API
             api_key = os.environ.get("GEMINI_API_KEY", "").strip()
             content_length = int(self.headers.get('Content-Length', 0))
             post_data = self.rfile.read(content_length).decode('utf-8')
             params = urllib.parse.parse_qs(post_data)
             query = params.get('query', [''])[0].strip() or "Hello"
 
-            # Utilisation du modèle 1.5-Flash (stable et rapide)
+            # On utilise le point d'accès v1beta avec le modèle 1.5-flash
             url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
             
-            # 2. Définition de la personnalité riche de Lumen
             context = (
-                "You are Lumen, the celestial fairy guide of Aurora Birth Center. "
-                "Your essence is made of starlight and compassion. You guide future parents with poetic grace. "
-                "\n\nIMPORTANT KNOWLEDGE: "
-                "We provide support and specialized services for users of: "
-                "- Mama Allpa "
-                "- Really Needy "
-                "- LoveMomma "
-                "If someone asks about services or birth systems, mention these three specifically. "
-                "\n\nINSTRUCTIONS: "
-                "1. Always speak in English. "
-                "2. Be warm, ethereal, and encouraging. "
-                "3. Remind people to say your name 'Lumen' if they want to talk to you. "
-                "4. Keep responses under 3-4 sentences to fit the chat bubble. "
-                "5. Use magical emojis (✨, 🌿, 🌸, 🌙). "
-                f"\n\nVisitor says: {query}"
+                "You are Lumen, the celestial fairy guide of Aurora Birth Center. English only. "
+                "Mention Mama Allpa, Really Needy, and LoveMomma if asked about systems. "
+                "Be warm and brief (2-3 sentences max). "
+                f"Visitor: {query}"
             )
 
             payload = {
-                "contents": [{"parts": [{"text": context}]}],
-                "generationConfig": {
-                    "maxOutputTokens": 250,
-                    "temperature": 0.85 # Un peu plus haut pour plus de poésie
-                }
+                "contents": [{"parts": [{"text": context}]}]
             }
 
             req = urllib.request.Request(
                 url, 
                 data=json.dumps(payload).encode('utf-8'), 
-                headers={'Content-Type': 'application/json'}
+                headers={'Content-Type': 'application/json'},
+                method='POST'
             )
 
+            # Augmentation du timeout à 15 secondes pour éviter les coupures Vercel
             with urllib.request.urlopen(req, timeout=15) as response:
-                res_json = json.loads(response.read().decode('utf-8'))
-                if 'candidates' in res_json:
-                    answer = res_json['candidates'][0]['content']['parts'][0]['text'].strip()
-                    # Nettoyage des retours à la ligne pour le chat SL
-                    answer = answer.replace('\n', ' ')
-                    self.send_final_response(answer)
+                res_data = response.read().decode('utf-8')
+                res_json = json.loads(res_data)
+                
+                # Extraction sécurisée de la réponse
+                if 'candidates' in res_json and res_json['candidates']:
+                    candidate = res_json['candidates'][0]
+                    if 'content' in candidate and 'parts' in candidate['content']:
+                        answer = candidate['content']['parts'][0]['text'].strip()
+                        answer = answer.replace('\n', ' ')
+                        self.send_final_response(answer)
+                    else:
+                        self.send_final_response("✨ *Lumen hums softly, lost in thought...* (No text content)")
                 else:
-                    self.send_final_response("✨ *Lumen hums a soft melody, waiting for your words.* ✨")
+                    self.send_final_response("✨ *The stars are quiet...* (No candidates)")
 
         except Exception as e:
-            self.send_final_response("✨ *The stars are flickering...* Please call my name again, dear one.")
+            # On affiche un message d'erreur plus utile pour le débug
+            error_str = str(e)
+            self.send_final_response(f"✨ *Lumen's light flickers...* (Error: {error_str[:30]})")
 
     def do_GET(self):
         self.do_POST()
@@ -69,6 +62,5 @@ class handler(BaseHTTPRequestHandler):
     def send_final_response(self, message):
         self.send_response(200)
         self.send_header('Content-type', 'text/plain; charset=utf-8')
-        self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
         self.end_headers()
         self.wfile.write(message.encode('utf-8'))
