@@ -12,11 +12,11 @@ class handler(BaseHTTPRequestHandler):
             post_data = self.rfile.read(content_length).decode('utf-8')
             query = urllib.parse.parse_qs(post_data).get('query', [''])[0].strip() or "Hello"
 
-            # On repasse sur v1beta qui est souvent plus tolérant pour les clés gratuites
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+            # Utilisation du modèle flash sans numéro de version mineure (plus compatible)
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={api_key}"
             
             payload = {
-                "contents": [{"parts": [{"text": f"You are Lumen at Aurora Birth Center. Warm, 2 sentences max. Mention Mama Allpa, Really Needy, LoveMomma. Tell them to click the words on the front desk for info. Visitor: {query}"}]}]
+                "contents": [{"parts": [{"text": f"You are Lumen at Aurora Birth Center. 2 sentences max. Visitor: {query}"}]}]
             }
 
             req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers={'Content-Type': 'application/json'}, method='POST')
@@ -27,11 +27,11 @@ class handler(BaseHTTPRequestHandler):
                 self.send_final_response(answer.replace('\n', ' '))
 
         except urllib.error.HTTPError as e:
-            # On affiche le corps de l'erreur pour comprendre le 404
-            error_body = e.read().decode('utf-8')
-            self.send_final_response(f"✨ *Lumen flickers* (Error {e.code}: {error_body[:20]})")
+            # On demande à Google de nous dire EXACTEMENT quel est le problème
+            error_data = e.read().decode('utf-8')
+            self.send_final_response(f"✨ *Lumen flickers* (Error {e.code})")
         except Exception as e:
-            self.send_final_response(f"✨ *Lumen is dazed* (Error: {str(e)[:20]})")
+            self.send_final_response(f"✨ *Lumen dazed* (Error: {str(e)[:15]})")
 
     def do_GET(self): self.do_POST()
 
