@@ -13,14 +13,17 @@ class handler(BaseHTTPRequestHandler):
             params = urllib.parse.parse_qs(post_data)
             query = params.get('query', [''])[0].strip() or "Hello"
 
-            # On utilise le point d'accès v1beta avec le modèle 1.5-flash
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+            # CHANGEMENT : Utilisation de la version 'v1' au lieu de 'v1beta'
+            # C'est l'URL la plus stable pour Gemini 1.5 Flash
+            url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
             
             context = (
-                "You are Lumen, the celestial fairy guide of Aurora Birth Center. English only. "
-                "Mention Mama Allpa, Really Needy, and LoveMomma if asked about systems. "
-                "Be warm and brief (2-3 sentences max). "
-                f"Visitor: {query}"
+                "You are Lumen, the celestial fairy guide of the Aurora Birth Center. "
+                "Always speak in English with a warm and poetic tone. "
+                "We support Mama Allpa, Really Needy, and LoveMomma birth systems. "
+                "Tell visitors to say your name 'Lumen' to talk to you. "
+                "Keep answers very brief (max 3 sentences). ✨"
+                f"\n\nVisitor: {query}"
             )
 
             payload = {
@@ -34,27 +37,22 @@ class handler(BaseHTTPRequestHandler):
                 method='POST'
             )
 
-            # Augmentation du timeout à 15 secondes pour éviter les coupures Vercel
             with urllib.request.urlopen(req, timeout=15) as response:
                 res_data = response.read().decode('utf-8')
                 res_json = json.loads(res_data)
                 
-                # Extraction sécurisée de la réponse
                 if 'candidates' in res_json and res_json['candidates']:
-                    candidate = res_json['candidates'][0]
-                    if 'content' in candidate and 'parts' in candidate['content']:
-                        answer = candidate['content']['parts'][0]['text'].strip()
-                        answer = answer.replace('\n', ' ')
-                        self.send_final_response(answer)
-                    else:
-                        self.send_final_response("✨ *Lumen hums softly, lost in thought...* (No text content)")
+                    answer = res_json['candidates'][0]['content']['parts'][0]['text'].strip()
+                    answer = answer.replace('\n', ' ')
+                    self.send_final_response(answer)
                 else:
-                    self.send_final_response("✨ *The stars are quiet...* (No candidates)")
+                    self.send_final_response("✨ *Lumen sparkles silently...*")
 
+        except urllib.error.HTTPError as e:
+            # Si ça renvoie encore une erreur, on affiche le code exact
+            self.send_final_response(f"✨ *Lumen's light flickers...* (Status: {e.code})")
         except Exception as e:
-            # On affiche un message d'erreur plus utile pour le débug
-            error_str = str(e)
-            self.send_final_response(f"✨ *Lumen's light flickers...* (Error: {error_str[:30]})")
+            self.send_final_response(f"✨ *Lumen is resting...* (Error: {str(e)[:20]})")
 
     def do_GET(self):
         self.do_POST()
