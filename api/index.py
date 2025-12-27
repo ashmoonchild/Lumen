@@ -7,36 +7,43 @@ import os
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
+            # 1. Récupération de la question
             content_length = int(self.headers.get('Content-Length', 0))
             post_data = self.rfile.read(content_length).decode('utf-8')
             query = urllib.parse.parse_qs(post_data).get('query', [''])[0]
-            api_key = os.environ.get("GEMINI_API_KEY")
-
-            # Liste des URLs à tester par ordre de priorité
-            urls = [
-                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}",
-                f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}",
-                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={api_key}"
-            ]
-
-            last_error = ""
-            for url in urls:
-                try:
-                    payload = {"contents": [{"parts": [{"text": f"Réponds comme une fée : {query}"}]}]}
-                    req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers={'Content-Type': 'application/json'}, method='POST')
-                    with urllib.request.urlopen(req, timeout=10) as response:
-                        res_data = json.loads(response.read().decode('utf-8'))
-                        answer = res_data['candidates'][0]['content']['parts'][0]['text']
-                        self.send_response_and_msg(answer)
-                        return # Succès ! On sort de la boucle.
-                except urllib.error.HTTPError as e:
-                    last_error = f"{e.code} sur {url.split('/')[5]}" # On garde l'erreur pour info
-                    continue # On tente l'URL suivante
             
-            self.send_response_and_msg(f"Aucun modèle n'a répondu. Dernière erreur : {last_error}")
+            # 2. Clé API (on enlève les espaces invisibles s'il y en a)
+            api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+            
+            # 3. URL simplifiée au maximum (Modèle Flash 1.5)
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+            
+            payload = {
+                "contents": [{"parts": [{"text": f"Tu es Lumen, réponds courtement : {query}"}]}]
+            }
 
+            req = urllib.request.Request(
+                url, 
+                data=json.dumps(payload).encode('utf-8'), 
+                headers={'Content-Type': 'application/json'},
+                method='POST'
+            )
+
+            with urllib.request.urlopen(req) as response:
+                res_data = json.loads(response.read().decode('utf-8'))
+                # Extraction sécurisée de la réponse
+                if 'candidates' in res_data and res_data['candidates']:
+                    answer = res_data['candidates'][0]['content']['parts'][0]['text']
+                    self.send_response_and_msg(answer)
+                else:
+                    self.send_response_and_msg("✨ Lumen réfléchit... réessaie !")
+
+        except urllib.error.HTTPError as e:
+            error_text = e.read().decode('utf-8')
+            # On affiche un résumé de l'erreur Google pour comprendre le 404
+            self.send_response_and_msg(f"Google Error {e.code}: Vérifie si l'API est activée.")
         except Exception as e:
-            self.send_response_and_msg(f"Erreur système : {str(e)}")
+            self.send_response_and_msg(f"Erreur : {str(e)}")
 
     def do_GET(self):
         self.do_POST()
