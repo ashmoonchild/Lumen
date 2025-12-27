@@ -25,8 +25,8 @@ class handler(BaseHTTPRequestHandler):
             payload = {
                 "contents": [{"parts": [{"text": prompt}]}],
                 "generationConfig": {
-                    "maxOutputTokens": 100, # Small enough to fit in any SL string
-                    "temperature": 0.7
+                    "maxOutputTokens": 200, # Small enough to fit in any SL string
+                    "temperature": 0.8
                 }
             }
 
