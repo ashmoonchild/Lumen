@@ -6,56 +6,45 @@ import os
 
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
-        try:
-            api_key = os.environ.get("GEMINI_API_KEY", "").strip()
-            content_length = int(self.headers.get('Content-Length', 0))
-            post_data = self.rfile.read(content_length).decode('utf-8')
-            params = urllib.parse.parse_qs(post_data)
-            query = params.get('query', [''])[0].strip() or "Hello"
+        api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+        content_length = int(self.headers.get('Content-Length', 0))
+        post_data = self.rfile.read(content_length).decode('utf-8')
+        query = urllib.parse.parse_qs(post_data).get('query', [''])[0].strip() or "Hello"
 
-            # CHANGEMENT : Utilisation de la version 'v1' au lieu de 'v1beta'
-            # C'est l'URL la plus stable pour Gemini 1.5 Flash
-            url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
-            
-            context = (
-                "You are Lumen, the celestial fairy guide of the Aurora Birth Center. "
-                "Always speak in English with a warm and poetic tone. "
-                "We support Mama Allpa, Really Needy, and LoveMomma birth systems. "
-                "Tell visitors to say your name 'Lumen' to talk to you. "
-                "Keep answers very brief (max 3 sentences). ✨"
-                f"\n\nVisitor: {query}"
-            )
+        # Liste des modèles à essayer (du plus récent au plus stable)
+        models_to_try = [
+            "gemini-2.0-flash-exp",
+            "gemini-1.5-flash",
+            "gemini-1.5-flash-8b"
+        ]
 
-            payload = {
-                "contents": [{"parts": [{"text": context}]}]
-            }
+        context = (
+            "You are Lumen, a fairy guide at Aurora Birth Center. "
+            "Speak English. Be warm. Mention Mama Allpa, Really Needy, and LoveMomma. "
+            f"Visitor: {query}"
+        )
+        payload = {"contents": [{"parts": [{"text": context}]}]}
 
-            req = urllib.request.Request(
-                url, 
-                data=json.dumps(payload).encode('utf-8'), 
-                headers={'Content-Type': 'application/json'},
-                method='POST'
-            )
-
-            with urllib.request.urlopen(req, timeout=15) as response:
-                res_data = response.read().decode('utf-8')
-                res_json = json.loads(res_data)
+        for model in models_to_try:
+            try:
+                # On tente l'appel
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+                req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers={'Content-Type': 'application/json'})
                 
-                if 'candidates' in res_json and res_json['candidates']:
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    res_json = json.loads(response.read().decode('utf-8'))
                     answer = res_json['candidates'][0]['content']['parts'][0]['text'].strip()
-                    answer = answer.replace('\n', ' ')
-                    self.send_final_response(answer)
-                else:
-                    self.send_final_response("✨ *Lumen sparkles silently...*")
+                    self.send_final_response(answer.replace('\n', ' '))
+                    return # Succès ! On arrête la boucle.
+            except urllib.error.HTTPError as e:
+                continue # Si 404, on passe au modèle suivant dans la liste
+            except Exception as e:
+                self.send_final_response(f"✨ *Lumen is dazed* (Error: {str(e)[:20]})")
+                return
 
-        except urllib.error.HTTPError as e:
-            # Si ça renvoie encore une erreur, on affiche le code exact
-            self.send_final_response(f"✨ *Lumen's light flickers...* (Status: {e.code})")
-        except Exception as e:
-            self.send_final_response(f"✨ *Lumen is resting...* (Error: {str(e)[:20]})")
+        self.send_final_response("✨ *Lumen cannot find her voice...* (All models 404)")
 
-    def do_GET(self):
-        self.do_POST()
+    def do_GET(self): self.do_POST()
 
     def send_final_response(self, message):
         self.send_response(200)
