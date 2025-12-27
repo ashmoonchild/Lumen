@@ -13,40 +13,34 @@ class handler(BaseHTTPRequestHandler):
             params = urllib.parse.parse_qs(post_data)
             query = params.get('query', [''])[0].strip() or "Hello"
 
-            # Using the 2.5 Flash model which worked!
             url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
             
-            # Setting up her English personality
+            # Refined prompt: We tell her to be EXTREMELY concise so she doesn't get cut off.
             prompt = (
-                "You are Lumen, a luminous and benevolent fairy guide at the Aurora Birth Center in Second Life. "
-                "Your role is to welcome future parents with grace, warmth, and a touch of magic. "
-                "Always respond in English. Keep your answers poetic, kind, and no longer than 3 sentences. "
-                "Use magical emojis like ✨, 🌸, or 🌿. "
-                f"The visitor says: {query}"
+                "You are Lumen, a fairy guide at the Aurora Birth Center. "
+                "Speak in English. Be warm, magical, and very brief (under 150 characters). "
+                f"Answer this: {query}"
             )
 
             payload = {
                 "contents": [{"parts": [{"text": prompt}]}],
                 "generationConfig": {
-                    "maxOutputTokens": 200,
-                    "temperature": 0.8
+                    "maxOutputTokens": 100, # Small enough to fit in any SL string
+                    "temperature": 0.7
                 }
             }
 
-            req = urllib.request.Request(
-                url, 
-                data=json.dumps(payload).encode('utf-8'), 
-                headers={'Content-Type': 'application/json'}
-            )
+            req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers={'Content-Type': 'application/json'})
 
             with urllib.request.urlopen(req, timeout=15) as response:
                 res = json.loads(response.read().decode('utf-8'))
-                answer = res['candidates'][0]['content']['parts'][0]['text']
+                answer = res['candidates'][0]['content']['parts'][0]['text'].strip()
+                # We remove any newlines that might break the SL chat
+                answer = answer.replace('\n', ' ')
                 self.send_final_response(answer)
 
         except Exception as e:
-            # Fallback message in English
-            self.send_final_response("✨ *Lumen sparkles softly* ✨ I am listening, dear soul. Please, tell me again.")
+            self.send_final_response("✨ *Lumen sparkles* ✨ I am here to guide you.")
 
     def do_GET(self): self.do_POST()
 
