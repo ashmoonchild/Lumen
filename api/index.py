@@ -12,25 +12,19 @@ class handler(BaseHTTPRequestHandler):
             post_data = self.rfile.read(content_length).decode('utf-8')
             query = urllib.parse.parse_qs(post_data).get('query', [''])[0].strip() or "Hello"
 
-            # Utilisation du modèle 1.5 Flash (le plus compatible)
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+            # Utilisation de l'alias 'latest' qui redirige vers le modèle actif
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
             
-            context = (
-            "SYSTEM: You are Lumen, a magical fairy guide at Aurora Birth Center. "
-            "STRICT RULES: Answer in ENGLISH only. Maximum 2 short sentences. "
-            "INFO: We support Mama Allpa, Really Needy, and LoveMomma. "
-            "IMPORTANT: If someone needs more details or is looking for documents, "
-            "tell them to click on the words on the front desk. "
-            "Be ethereal, warm, and brief. ✨"
-            f"\n\nVisitor: {query}"
-            )
-
             payload = {
-                "contents": [{"parts": [{"text": context}]}],
-                "generationConfig": {"maxOutputTokens": 80, "temperature": 0.7}
+                "contents": [{
+                    "parts": [{
+                        "text": f"SYSTEM: You are Lumen at Aurora Birth Center. Warm, 2 sentences max. Mention Mama Allpa, Really Needy, LoveMomma. Tell them to click the words on the front desk for info. Visitor: {query}"
+                    }]
+                }],
+                "generationConfig": {"maxOutputTokens": 80}
             }
 
-            req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers={'Content-Type': 'application/json'})
+            req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers={'Content-Type': 'application/json'}, method='POST')
             
             with urllib.request.urlopen(req, timeout=10) as response:
                 res_json = json.loads(response.read().decode('utf-8'))
@@ -38,8 +32,8 @@ class handler(BaseHTTPRequestHandler):
                 self.send_final_response(answer.replace('\n', ' '))
 
         except urllib.error.HTTPError as e:
-            # On affiche le code d'erreur Google (400, 403, 429...)
-            self.send_final_response(f"✨ *Lumen's light flickers* (Google Error {e.code})")
+            # On affiche le code d'erreur et le modèle testé pour débugger
+            self.send_final_response(f"✨ *Lumen flickers* (Error {e.code})")
         except Exception as e:
             self.send_final_response(f"✨ *Lumen is dazed* (Error: {str(e)[:20]})")
 
