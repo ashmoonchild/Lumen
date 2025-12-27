@@ -7,21 +7,18 @@ import os
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
-            # 1. Récupération des données
             content_length = int(self.headers.get('Content-Length', 0))
             post_data = self.rfile.read(content_length).decode('utf-8')
-            data = urllib.parse.parse_qs(post_data)
-            query = data.get('query', [''])[0]
+            query = urllib.parse.parse_qs(post_data).get('query', [''])[0]
 
-            # 2. Clé API
             api_key = os.environ.get("GEMINI_API_KEY")
             
-            # 3. URL ULTRA-STRICTE (v1 avec gemini-1.5-flash)
-            # Note: pas de 'models/' en trop, pas de faute de frappe
-            url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
+            # Utilisation de gemini-pro (le plus compatible historiquement) 
+            # sur la version v1beta qui accepte presque toutes les clés
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={api_key}"
             
             payload = {
-                "contents": [{"parts": [{"text": f"Tu es Lumen, fée guide. Réponds courtement : {query}"}]}]
+                "contents": [{"parts": [{"text": f"Tu es Lumen, réponds en une phrase : {query}"}]}]
             }
             
             req = urllib.request.Request(
@@ -31,21 +28,17 @@ class handler(BaseHTTPRequestHandler):
                 method='POST'
             )
 
-            # 4. Envoi
             with urllib.request.urlopen(req) as response:
                 res_data = json.loads(response.read().decode('utf-8'))
-                if "candidates" in res_data:
-                    answer = res_data['candidates'][0]['content']['parts'][0]['text']
-                    self.send_response_and_msg(answer)
-                else:
-                    self.send_response_and_msg("✨ Lumen est pensive, réessaie dans un instant...")
+                answer = res_data['candidates'][0]['content']['parts'][0]['text']
+                self.send_response_and_msg(answer)
 
         except urllib.error.HTTPError as e:
-            # Diagnostic précis pour le 404
-            error_msg = e.read().decode('utf-8')
-            self.send_response_and_msg(f"Erreur Google {e.code}: Accès refusé ou modèle invalide.")
+            # Affichage du corps de l'erreur pour comprendre le 404
+            err_body = e.read().decode('utf-8')
+            self.send_response_and_msg(f"Google dit : {e.code} - {e.reason}")
         except Exception as e:
-            self.send_response_and_msg(f"Souci technique : {str(e)}")
+            self.send_response_and_msg(f"Erreur : {str(e)}")
 
     def do_GET(self):
         self.do_POST()
