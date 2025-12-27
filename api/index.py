@@ -11,38 +11,41 @@ class handler(BaseHTTPRequestHandler):
         post_data = self.rfile.read(content_length).decode('utf-8')
         query = urllib.parse.parse_qs(post_data).get('query', [''])[0].strip() or "Hello"
 
-        # Liste des modèles à essayer (du plus récent au plus stable)
-        models_to_try = [
-            "gemini-2.0-flash-exp",
-            "gemini-1.5-flash",
-            "gemini-1.5-flash-8b"
-        ]
+        # Liste des modèles (On garde ta liste qui fonctionne)
+        models_to_try = ["gemini-2.0-flash-exp", "gemini-1.5-flash"]
 
+        # Prompt ultra-directif pour limiter la longueur
         context = (
-            "You are Lumen, a fairy guide at Aurora Birth Center. "
-            "Speak English. Be warm. Mention Mama Allpa, Really Needy, and LoveMomma. "
-            f"Visitor: {query}"
+            "SYSTEM: You are Lumen, a magical fairy at Aurora Birth Center. "
+            "STRICT RULES: Answer in ENGLISH only. Maximum 2 short sentences. "
+            "If asked about systems, mention Mama Allpa, Really Needy, and LoveMomma. "
+            "Be ethereal but extremely brief. ✨"
+            f"\n\nVisitor: {query}"
         )
-        payload = {"contents": [{"parts": [{"text": context}]}]}
+        
+        payload = {
+            "contents": [{"parts": [{"text": context}]}],
+            "generationConfig": {
+                "maxOutputTokens": 80,  # Limite technique absolue
+                "temperature": 0.7
+            }
+        }
 
         for model in models_to_try:
             try:
-                # On tente l'appel
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
                 req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers={'Content-Type': 'application/json'})
                 
                 with urllib.request.urlopen(req, timeout=10) as response:
                     res_json = json.loads(response.read().decode('utf-8'))
                     answer = res_json['candidates'][0]['content']['parts'][0]['text'].strip()
+                    # On s'assure qu'il n'y a pas de sauts de ligne
                     self.send_final_response(answer.replace('\n', ' '))
-                    return # Succès ! On arrête la boucle.
-            except urllib.error.HTTPError as e:
-                continue # Si 404, on passe au modèle suivant dans la liste
-            except Exception as e:
-                self.send_final_response(f"✨ *Lumen is dazed* (Error: {str(e)[:20]})")
-                return
+                    return 
+            except:
+                continue 
 
-        self.send_final_response("✨ *Lumen cannot find her voice...* (All models 404)")
+        self.send_final_response("✨ *Lumen is tired...* (All models failed)")
 
     def do_GET(self): self.do_POST()
 
