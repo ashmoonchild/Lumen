@@ -12,11 +12,11 @@ class handler(BaseHTTPRequestHandler):
             post_data = self.rfile.read(content_length).decode('utf-8')
             query = urllib.parse.parse_qs(post_data).get('query', [''])[0].strip() or "Hello"
 
-            # Passage sur un modèle Llama-3 ultra-disponible
-            url = "https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct"
+            # Utilisation de Llama 3.2 (le modèle le plus récent et disponible)
+            url = "https://api-inference.huggingface.co/models/meta-llama/Llama-3.2-3B-Instruct"
             
             payload = {
-                "inputs": f"You are Lumen, a fairy guide at Aurora Birth Center. Warm, 2 sentences max. Mention Mama Allpa, Really Needy, LoveMomma. Visitor: {query}",
+                "inputs": f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nYou are Lumen, a fairy guide at Aurora Birth Center. Warm, 2 sentences max. Mention Mama Allpa, Really Needy, LoveMomma. Tell them to click the front desk for info.<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{query}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n",
                 "parameters": {"max_new_tokens": 100, "return_full_text": False}
             }
 
@@ -24,26 +24,22 @@ class handler(BaseHTTPRequestHandler):
             req.add_header('Authorization', f'Bearer {api_key}')
             req.add_header('Content-Type', 'application/json')
             
-            with urllib.request.urlopen(req, timeout=15) as response:
+            with urllib.request.urlopen(req, timeout=20) as response:
                 res_json = json.loads(response.read().decode('utf-8'))
                 
-                # Gestion de la réponse qui peut être une liste ou un dictionnaire
-                if isinstance(res_json, list):
+                if isinstance(res_json, list) and len(res_json) > 0:
                     answer = res_json[0].get('generated_text', '').strip()
+                elif 'error' in res_json:
+                    answer = f"✨ *Lumen is warming up her wings...* (Try again in 20s)"
                 else:
-                    answer = res_json.get('generated_text', '').strip()
-                
-                # Si la réponse est vide, message de secours
-                if not answer:
-                    answer = "Welcome to Aurora! I am Lumen. Please click the front desk for info."
+                    answer = "Welcome to Aurora! I'm Lumen. Click the front desk for info!"
                 
                 self.send_final_response(answer.replace('\n', ' '))
 
         except urllib.error.HTTPError as e:
-            # On affiche le code d'erreur exact pour comprendre
-            self.send_final_response(f"✨ *Lumen flickers* (Error {e.code})")
+            self.send_final_response(f"✨ *Lumen flickers* (Gate {e.code})")
         except Exception as e:
-            self.send_final_response(f"✨ *Lumen is dazed* ({str(e)[:15]})")
+            self.send_final_response(f"✨ *Lumen is dazed* (Restarting...)")
 
     def do_GET(self): self.do_POST()
 
