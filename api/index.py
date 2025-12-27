@@ -10,34 +10,26 @@ class handler(BaseHTTPRequestHandler):
             content_length = int(self.headers.get('Content-Length', 0))
             post_data = self.rfile.read(content_length).decode('utf-8')
             query = urllib.parse.parse_qs(post_data).get('query', [''])[0].strip() or "Bonjour"
-
             api_key = os.environ.get("GEMINI_API_KEY", "").strip()
             
-            # Utilisation de la version v1 (la plus stable pour les droits d'accès)
+            # On utilise l'URL v1 avec le modèle flash (le plus standard)
             url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
             
-            payload = {
-                "contents": [{"parts": [{"text": f"Réponds très brièvement : {query}"}]}],
-                "safetySettings": [
-                    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"}
-                ]
-            }
+            payload = {"contents": [{"parts": [{"text": query}]}]}
+            req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers={'Content-Type': 'application/json'})
 
-            req = urllib.request.Request(
-                url, 
-                data=json.dumps(payload).encode('utf-8'),
-                headers={'Content-Type': 'application/json'}
-            )
-
-            with urllib.request.urlopen(req, timeout=10) as response:
+            with urllib.request.urlopen(req) as response:
                 res = json.loads(response.read().decode('utf-8'))
-                answer = res['candidates'][0]['content']['parts'][0]['text']
-                self.send_msg(answer)
+                self.send_msg(res['candidates'][0]['content']['parts'][0]['text'])
 
         except urllib.error.HTTPError as e:
-            msg = e.read().decode('utf-8')
-            self.send_msg(f"Erreur 403 : Vérifie les restrictions de ta clé sur AI Studio.")
+            # ICI : On récupère la VRAIE raison du 403
+            raw_error = e.read().decode('utf-8')
+            try:
+                reason = json.loads(raw_error)['error']['message']
+            except:
+                reason = raw_error[:100]
+            self.send_msg(f"Google 403: {reason}")
         except Exception as e:
             self.send_msg(f"Erreur : {str(e)}")
 
