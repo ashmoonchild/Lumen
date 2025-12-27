@@ -7,25 +7,21 @@ import os
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
-            # 1. Récupération de la clé
+            # 1. Clé API
             api_key = os.environ.get("GEMINI_API_KEY", "").strip()
             
-            # 2. Données de Second Life
+            # 2. Données SL
             content_length = int(self.headers.get('Content-Length', 0))
             post_data = self.rfile.read(content_length).decode('utf-8')
-            params = urllib.parse.parse_qs(post_data)
-            query = params.get('query', [''])[0].strip() or "Hello"
+            query = urllib.parse.parse_qs(post_data).get('query', [''])[0].strip() or "Hello"
 
-            # 3. URL Gemini 1.5 Flash (le plus stable en fin 2025 pour les scripts simples)
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+            # 3. URL ciblée sur le modèle présent dans votre liste (v1beta / gemini-2.0-flash-001)
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-001:generateContent?key={api_key}"
             
-            # 4. Payload ultra-simplifié (pour éviter les erreurs de structure)
             payload = {
-                "contents": [
-                    {
-                        "parts": [{"text": f"You are Lumen, a fairy at Aurora Birth Center. Answer in English, very briefly: {query}"}]
-                    }
-                ]
+                "contents": [{
+                    "parts": [{"text": f"You are Lumen, a magical fairy guide at the Aurora Birth Center. Be brief and warm in English: {query}"}]
+                }]
             }
 
             req = urllib.request.Request(
@@ -35,26 +31,21 @@ class handler(BaseHTTPRequestHandler):
                 method='POST'
             )
 
-            # 5. Tentative d'appel
             with urllib.request.urlopen(req, timeout=10) as response:
                 res_json = json.loads(response.read().decode('utf-8'))
-                
-                # Vérification de la présence de la réponse
-                if 'candidates' in res_json and len(res_json['candidates']) > 0:
+                if 'candidates' in res_json:
                     answer = res_json['candidates'][0]['content']['parts'][0]['text']
-                    self.send_final_response(answer)
+                    self.send_final_response(answer.strip())
                 else:
-                    self.send_final_response("Empty response from Google.")
+                    self.send_final_response("I am searching for my magic dust... try again!")
 
         except urllib.error.HTTPError as e:
-            # Affiche l'erreur Google réelle (ex: 400, 429, 500)
-            self.send_final_response(f"Google HTTP Error: {e.code}")
+            # On affiche l'erreur pour comprendre si le 404 persiste
+            self.send_final_response(f"Lumen Error {e.code}: Model mismatch.")
         except Exception as e:
-            # Affiche l'erreur Python réelle
-            self.send_final_response(f"Python Error: {str(e)[:50]}")
+            self.send_final_response(f"Lumen Error: {str(e)[:30]}")
 
-    def do_GET(self):
-        self.do_POST()
+    def do_GET(self): self.do_POST()
 
     def send_final_response(self, message):
         self.send_response(200)
