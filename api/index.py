@@ -12,16 +12,15 @@ class handler(BaseHTTPRequestHandler):
             post_data = self.rfile.read(content_length).decode('utf-8')
             query = urllib.parse.parse_qs(post_data).get('query', [''])[0].strip() or "Hello"
 
-            # Utilisation de l'alias 'latest' qui redirige vers le modèle actif
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
+            # URL STABLE V1 - C'est l'adresse officielle de production
+            url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
             
             payload = {
                 "contents": [{
                     "parts": [{
-                        "text": f"SYSTEM: You are Lumen at Aurora Birth Center. Warm, 2 sentences max. Mention Mama Allpa, Really Needy, LoveMomma. Tell them to click the words on the front desk for info. Visitor: {query}"
+                        "text": f"You are Lumen, fairy at Aurora Birth Center. Brief (2 sentences). Mention Mama Allpa, Really Needy, LoveMomma. Tell them to click the words on the front desk for info. Visitor: {query}"
                     }]
-                }],
-                "generationConfig": {"maxOutputTokens": 80}
+                }]
             }
 
             req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers={'Content-Type': 'application/json'}, method='POST')
@@ -32,8 +31,8 @@ class handler(BaseHTTPRequestHandler):
                 self.send_final_response(answer.replace('\n', ' '))
 
         except urllib.error.HTTPError as e:
-            # On affiche le code d'erreur et le modèle testé pour débugger
-            self.send_final_response(f"✨ *Lumen flickers* (Error {e.code})")
+            # On affiche le code d'erreur Google pour voir si le 404 disparaît
+            self.send_final_response(f"✨ *Lumen flickers* (Status {e.code})")
         except Exception as e:
             self.send_final_response(f"✨ *Lumen is dazed* (Error: {str(e)[:20]})")
 
