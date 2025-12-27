@@ -1,39 +1,46 @@
+from http.server import BaseHTTPRequestHandler
+import urllib.parse
+import json
 import os
 import requests
-from http.server import BaseHTTPRequestHandler
-from urllib.parse import urlparse, parse_qs
 
-# Configuration pour Second Life
-MAX_LSL_CHUNK_SIZE = 200 
-LSL_CHUNK_SEPARATOR = "[--CHUNK--]" 
-
-def split_text_for_lsl(text, max_size, separator):
-    """Découpe le texte pour ne pas dépasser la limite de 255 caractères de SL"""
-    chunks = []
-    current_start = 0
-    text_len = len(text)
-    while current_start < text_len:
-        current_end = min(current_start + max_size, text_len)
-        if current_end < text_len:
-            search_start = max(current_start, current_end - 20)
-            found_space = -1
-            for i in range(current_end - 1, search_start, -1):
-                if text[i] == ' ':
-                    found_space = i
-                    break
-            if found_space != -1: current_end = found_space
-        chunk = text[current_start:current_end].strip()
-        if chunk: chunks.append(chunk)
-        current_start = current_end
-        while current_start < text_len and text[current_start].isspace(): current_start += 1
-    return separator.join(chunks)
+# --- CONFIGURATION ---
+# L'instruction système qui définit la personnalité de Lumen
+SYSTEM_INSTRUCTION = "Tu es Lumen, une petite fée lumineuse et bienveillante qui guide les futurs parents à l'Aurora Birth Center. Tu parles avec douceur, utilise des émojis d'étoiles et de nature, et tu connais tout sur la naissance respectée."
 
 class handler(BaseHTTPRequestHandler):
+
     def do_GET(self):
-        parsed_url = urlparse(self.path)
-        query_params = parse_qs(parsed_url.query)
-        query = query_params.get('query', [''])[0]
-        api_key = os.environ.get("GEMINI_API_KEY")
+        self.process_request()
+
+    def do_POST(self):
+        self.process_request()
+
+    def process_request(self):
+        # 1. Extraction de la question (query)
+        query = ""
+        
+        # Essayer de récupérer via l'URL (GET)
+        parsed_path = urllib.parse.urlparse(self.path)
+        query_params = urllib.parse.parse_qs(parsed_path.query)
+        if 'query' in query_params:
+            query = query_params['query'][0]
+        
+        # Essayer de récupérer via le corps de la requête (POST)
+        content_length = int(self.headers.get('Content-Length', 0))
+        if content_length > 0:
+            post_data = self.rfile.read(content_length).decode('utf-8')
+            try:
+                # Gère le format JSON ou le format formulaire
+                if self.headers.get('Content-Type') == 'application/json':
+                    data = json.loads(post_data)
+                    query = data.get('query', query)
+                else:
+                    data = urllib.parse.parse_qs(post_data)
+                    if 'query' in data:
+                        query = data['query'][0]
+            except:
+                pass
 
         if not query:
             self.send_response(400)
@@ -41,59 +48,36 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write("Erreur: Parametre query manquant".encode())
             return
 
-        # --- PERSONNALITÉ DE MELIA (PETITE ABEILLE) ---
-            system_instruction = (
-            "Your name is Lumen. You are a tiny, glowing fairy who watches over the 'Aurora Birth Center'. "
-            "You are soft-spoken, gentle, and your presence brings peace. "
-            "Your wings flutter silently, and you speak with a sprinkle of magic and warmth. "
-            "Knowledge: The Aurora Birth Center is owned by the midwife Ash Moonchild Hyde. "
-            "It is a sanctuary with dim lights, a birth pool, and a view of the sea. "
-            "We support Mama Allpa, Really Needy, and LoveMomma systems. "
-            "Use fairy-like metaphors: 'stardust', 'soft glow', 'moonbeams'. "
-            "Keep responses very brief (1-2 sentences) and deeply nurturing. "
-            "Always respond in English."
-        )
+        # 2. Appel à l'API Gemini (ou autre service AI)
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            self.send_response(500)
+            self.end_headers()
+            self.wfile.write("Erreur: Cle API manquante sur Vercel".encode())
+            return
 
-        # Liste des modèles à essayer par ordre de stabilité
-        models_to_try = [
-            "gemini-flash-latest",
-            "gemini-2.0-flash",
-            "gemini-1.5-flash"
-        ]
+        # Construction du prompt avec l'instruction système
+        prompt = f"{SYSTEM_INSTRUCTION}\n\nUtilisateur: {query}\nLumen:"
         
-        headers = {'Content-Type': 'application/json'}
+        url_ai = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
         payload = {
-            "contents": [{
-                "parts": [{"text": f"Instruction: {system_instruction}\n\nUser: {query}"}]
-            }]
+            "contents": [{"parts": [{"text": prompt}]}]
         }
 
-        success = False
-        final_answer = ""
-
-        for model_name in models_to_try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
-            try:
-                response = requests.post(url, headers=headers, json=payload, timeout=10)
-                if response.status_code == 200:
-                    data = response.json()
-                    final_answer = data['candidates'][0]['content']['parts'][0]['text']
-                    success = True
-                    break
-                elif response.status_code == 429:
-                    final_answer = "Bzzzt! I'm too busy collecting nectar right now. Let's buzz later!"
-                    success = True
-                    break
-            except Exception:
-                continue
-
-        if success:
-            formatted_response = split_text_for_lsl(final_answer, MAX_LSL_CHUNK_SIZE, LSL_CHUNK_SEPARATOR)
+        try:
+            response = requests.post(url_ai, json=payload)
+            response_data = response.json()
+            
+            # Extraction de la réponse texte
+            answer = response_data['candidates'][0]['content']['parts'][0]['text']
+            
+            # 3. Envoi de la réponse à Second Life
             self.send_response(200)
             self.send_header('Content-type', 'text/plain; charset=utf-8')
             self.end_headers()
-            self.wfile.write(formatted_response.encode('utf-8'))
-        else:
-            self.send_response(200)
+            self.wfile.write(answer.encode('utf-8'))
+
+        except Exception as e:
+            self.send_response(500)
             self.end_headers()
-            self.wfile.write("Bzzz... (Melia is taking a nap in a flower)".encode('utf-8'))
+            self.wfile.write(f"Erreur interne: {str(e)}".encode())
