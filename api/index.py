@@ -7,38 +7,34 @@ import os
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
-            # On récupère la clé
-            api_key = os.environ.get("GROQ_API_KEY", "").strip()
+            # On récupère la clé 'API_KEY' de Vercel
+            api_key = os.environ.get("API_KEY", "").strip()
             
             content_length = int(self.headers.get('Content-Length', 0))
             post_data = self.rfile.read(content_length).decode('utf-8')
             query = urllib.parse.parse_qs(post_data).get('query', [''])[0].strip() or "Hello"
 
-            # Utilisation de Mixtral, souvent plus stable sur les nouveaux comptes
-            url = "https://api.groq.com/openai/v1/chat/completions"
+            # URL la plus compatible en 2025
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+            
             payload = {
-                "model": "mixtral-8x7b-32768",
-                "messages": [
-                    {"role": "system", "content": "You are Lumen, a fairy guide at Aurora Birth Center. Warm, 2 sentences max. Mention Mama Allpa, Really Needy, LoveMomma."},
-                    {"role": "user", "content": query}
-                ]
+                "contents": [{"parts": [{"text": f"You are Lumen at Aurora Birth Center. Brief, 2 sentences max. Mention Mama Allpa, Really Needy, LoveMomma. Visitor: {query}"}]}]
             }
 
-            req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), method='POST')
-            req.add_header('Content-Type', 'application/json')
-            req.add_header('Authorization', f'Bearer {api_key}')
+            req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers={'Content-Type': 'application/json'}, method='POST')
             
             with urllib.request.urlopen(req, timeout=10) as response:
                 res_json = json.loads(response.read().decode('utf-8'))
-                answer = res_json['choices'][0]['message']['content']
-                self.send_final_response(answer.replace('\n', ' '))
+                if 'candidates' in res_json:
+                    answer = res_json['candidates'][0]['content']['parts'][0]['text'].strip()
+                    self.send_final_response(answer.replace('\n', ' '))
+                else:
+                    self.send_final_response("✨ *Lumen is dazed* (No candidates)")
 
         except urllib.error.HTTPError as e:
-            # Si ça échoue, on affiche la raison précise pour corriger
-            err_msg = e.read().decode('utf-8')
-            self.send_final_response(f"✨ *Lumen flickers* (Log: {err_msg[15:40]})")
+            self.send_final_response(f"✨ *Lumen flickers* (Google Error {e.code})")
         except Exception as e:
-            self.send_final_response(f"✨ *Lumen is dazed* ({str(e)[:20]})")
+            self.send_final_response(f"✨ *Lumen is dazed* ({str(e)[:15]})")
 
     def do_GET(self): self.do_POST()
 
